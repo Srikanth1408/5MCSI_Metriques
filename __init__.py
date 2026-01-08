@@ -1,15 +1,56 @@
-from flask import Flask, render_template_string, render_template, jsonify
-from flask import render_template
-from flask import json
-from datetime import datetime
-from urllib.request import urlopen
-import sqlite3
-                                                                                                                                       
-app = Flask(__name__)                                                                                                                  
-                                                                                                                                       
-@app.route('/')
-def hello_world():
-    return render_template('hello.html') #Comm2
-  
-if __name__ == "__main__":
-  app.run(debug=True)
+name: Industrialisation continue sur le serveur Alwaysdata
+on: push
+jobs:
+  Connexion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connexion SSH avec le serveur
+        uses: appleboy/ssh-action@master
+        with:
+          host: "ssh-etudiant1.alwaysdata.net"
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          script: |
+            cd $HOME/www/
+  Copy:
+    needs: Connexion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Connexion SSH avec le serveur
+        uses: appleboy/ssh-action@master
+        with:
+          host: "ssh-etudiant1.alwaysdata.net"
+          username: ${{ secrets.USERNAME }}
+          password: ${{ secrets.PASSWORD }}
+          script: |
+            last_directory=$(basename ${{ runner.workspace }})
+            cd $HOME/www/
+            git clone https://github.com/${{ github.repository }}.git
+            # Vérifier si le répertoire de destination existe
+            if [ "$(ls -A ./flask)" ]; then
+              rsync -r ./$last_directory/ ./flask
+              rm -rf ./$last_directory
+            else
+              echo "Le répertoire flask de destination sur votre serveur n'existe pas"
+              exit 1
+            fi
+  Restart:
+    needs: Copy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restart Alwaysdata site
+        run: |
+          response_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST --basic --user "${{ secrets.ALWAYSDATA_TOKEN }}:" https://api.alwaysdata.com/v1/site/${{ secrets.ALWAYSDATA_SITE_ID }}/restart/)
+          # Vérifier le code de réponse HTTP
+          if [ "$response_code" -eq 204 ]; then
+            echo "Relance de votre site réussi"
+          elif [ "$response_code" -eq 404 ]; then
+            echo "Vous n'avez pas renseigner correctement votre secret ALWAYSDATA_SITE_ID"
+            exit 1  # Quitter avec un code d'erreur
+          elif [ "$response_code" -eq 401 ]; then
+            echo "Vous n'avez pas renseigner correctement votre secret ALWAYSDATA_TOKEN"
+          exit 1  # Quitter avec un code d'erreur
+          else
+            echo "Échec du redémarrage avec le code de réponse : $response_code"
+            exit 1  # Quitter avec un code d'erreur
+          fi
