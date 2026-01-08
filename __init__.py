@@ -74,7 +74,7 @@ def commits_data():
 
 @app.route('/commits/')
 def graph_commits():
-    return render_template("commits.html")
+    return render_template("Commits.html")
 
 
 if __name__ == "__main__":
